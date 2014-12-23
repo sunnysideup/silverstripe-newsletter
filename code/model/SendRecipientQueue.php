@@ -34,7 +34,7 @@ class SendRecipientQueue extends DataObject {
 
 	public function fieldLabels($includelrelations = true) {
 		$labels = parent::fieldLabels($includelrelations);
-		
+
 		$labels["Status"] = _t('Newsletter.FieldStatus', "Status");
 		$labels["Recipient.Email"] = _t('Newsletter.FieldEmail', "Email");
 		$labels["RetryCount"] = _t('Newsletter.FieldRetryCount', "Retry Count");
@@ -43,7 +43,11 @@ class SendRecipientQueue extends DataObject {
 		return $labels;
 	}
 
-	/** Send the email out to the Recipient */
+	/**
+	 * Send the email out to the Recipient
+	 * @param Newsletter $newsletter
+	 * @param Recipient $recipient
+	 */
 	public function send($newsletter = null, $recipient = null) {
 		if (empty($newsletter)) $newsletter = $this->Newsletter();
 		if (empty($recipient)) $recipient = $this->Recipient();
@@ -61,12 +65,14 @@ class SendRecipientQueue extends DataObject {
 			if ($success) {
 				$this->Status = 'Sent';
 				$recipient->ReceivedCount = $recipient->ReceivedCount + 1;
-			} else {
+			}
+			else {
 				$this->Status = 'Failed';
 				$recipient->BouncedCount = $recipient->BouncedCount + 1;
 			}
 			$recipient->write();
-		} else {
+		}
+		else {
 			$this->Status = 'BlackListed';
 		}
 
