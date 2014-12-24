@@ -74,8 +74,7 @@ class NewsletterSendController extends BuildTask {
 				//duplicate filtering
 				$existingQueue = SendRecipientQueue::get()->filter(array(
 					'RecipientID' => $recipientID,
-					'NewsletterID' => $newsletter->ID,
-					'Status' => array('Scheduled', 'InProgress')
+					'NewsletterID' => $newsletter->ID
 				));
 				if($existingQueue->exists()) continue;
 
