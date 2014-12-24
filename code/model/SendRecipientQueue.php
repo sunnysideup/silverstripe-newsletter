@@ -8,7 +8,11 @@
  */
 class SendRecipientQueue extends DataObject {
 
-	private static $forced_delay = 2;
+	/**
+	 * Number of seconds delay before sending each mail.
+	 * @var Int
+	 */
+	private static $forced_delay = 0;
 
 	/**
 	 *	Status has 6 possible values:

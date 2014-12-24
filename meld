@@ -1,0 +1,1475 @@
+diff --git a/.gitignore b/.gitignore
+old mode 100644
+new mode 100755
+index 9ba470d..8b88318
+--- a/.gitignore
++++ b/.gitignore
+@@ -1 +1,2 @@
+-.sass-cache
+\ No newline at end of file
++.sass-cache
++.svn
+\ No newline at end of file
+diff --git a/.travis.yml b/.travis.yml
+old mode 100644
+new mode 100755
+diff --git a/.tx/config b/.tx/config
+old mode 100644
+new mode 100755
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+old mode 100644
+new mode 100755
+diff --git a/LICENSE b/LICENSE
+old mode 100644
+new mode 100755
+diff --git a/README.md b/README.md
+old mode 100644
+new mode 100755
+diff --git a/_config.php b/_config.php
+old mode 100644
+new mode 100755
+index 20b3076..5e7b65c
+--- a/_config.php
++++ b/_config.php
+@@ -1,7 +1,7 @@
+ <?php
+ /**
+  * URL rules for the CMS module
+- * 
++ *
+  * @package newsletter
+  */
+ if(!(defined('NEWSLETTER_DIR'))){
+@@ -9,14 +9,18 @@ if(!(defined('NEWSLETTER_DIR'))){
+ }
+ 
+ if (class_exists('MessageQueue')) {
+-	MessageQueue::add_interface("default", array( "queues" => "/.*/",
+-		"implementation" => "SimpleDBMQ",
+-		"encoding" => "php_serialize",
+-		"send" => array( "onShutdown" => "all" ),
+-		"delivery" => array( "onerror" => array( "log" ) ),
+-		"retrigger" => "yes", // on consume, retrigger if there are more items
+-		"onShutdownMessageLimit" => "1" // one message per async process
+-	));
++	MessageQueue::add_interface(
++		"default",
++		array(
++			"queues" => "/.*/",
++			"implementation" => "SimpleDBMQ",
++			"encoding" => "php_serialize",
++			"send" => array( "onShutdown" => "all" ),
++			"delivery" => array( "onerror" => array( "log" ) ),
++			"retrigger" => "yes", // on consume, retrigger if there are more items
++			"onShutdownMessageLimit" => "1" // one message per async process
++		)
++	);
+ }
+ 
+ //SS_Log::add_writer(new SS_LogFileWriter(BASE_PATH . '/logN.txt'), SS_Log::NOTICE);
+diff --git a/_config/config.yml b/_config/config.yml
+old mode 100644
+new mode 100755
+diff --git a/code/controller/NewsletterAdmin.php b/code/controller/NewsletterAdmin.php
+old mode 100644
+new mode 100755
+diff --git a/code/controller/NewsletterSendController.php b/code/controller/NewsletterSendController.php
+old mode 100644
+new mode 100755
+index 6acc11b..9368a42
+--- a/code/controller/NewsletterSendController.php
++++ b/code/controller/NewsletterSendController.php
+@@ -53,7 +53,9 @@ class NewsletterSendController extends BuildTask {
+ 	 * @return NewsletterSendController
+ 	 */
+ 	public static function inst() {
+-		if(!self::$inst) self::$inst = new NewsletterSendController();
++		if(!self::$inst) {
++			self::$inst = new NewsletterSendController();
++		}
+ 		return self::$inst;
+ 	}
+ 
+@@ -120,17 +122,18 @@ class NewsletterSendController extends BuildTask {
+ 		$stuckQueueItems = SendRecipientQueue::get()->filter(array(
+ 			'NewsletterID' => $newsletterID,
+ 			'Status' => 'InProgress',
+-			'LastEdited:LessThan' => date('Y-m-d H:i:m',strtotime('-'.self::$stuck_timeout.' minutes'))
++			'LastEdited:LessThan' => date('Y-m-d H:i:m',strtotime('-'.$this->Config()->get("stuck_timeout").' minutes'))
+ 		));
+ 
+ 		$stuckCount = $stuckQueueItems->count();
+ 		if ($stuckCount  > 0) {
+ 			foreach($stuckQueueItems as $item){
+-				if ($item->RetryCount < self::$retry_limit) {
++				if ($item->RetryCount < $this->Config()->get("retry_limit")) {
+ 					$item->RetryCount = $item->RetryCount + 1;
+ 					$item->Status = "Scheduled";    //retry the item
+ 					$item->write();
+-				} else {    //enough retries, stop this email and mark it as failed
++				}
++				else {    //enough retries, stop this email and mark it as failed
+ 					$item->Status = "Failed";
+ 					$item->write();
+ 				}
+@@ -179,7 +182,7 @@ class NewsletterSendController extends BuildTask {
+ 					$queueItems = SendRecipientQueue::get()
+ 							->filter(array('NewsletterID' => $newsletterID, 'Status' => 'Scheduled'))
+ 							->sort('Created ASC')
+-							->limit(self::$items_to_batch_process);
++							->limit($this->Config()->get("items_to_batch_process"));
+ 
+ 					//set them all to "in process" at once
+ 					foreach($queueItems as $item){
+@@ -229,7 +232,9 @@ class NewsletterSendController extends BuildTask {
+ 					$this->processQueueOnShutdown($newsletterID);
+ 
+ 					//wait to avoid overloading the email server with too many emails that look like spam
+-					if (!empty(self::$throttle_batch_delay)) sleep(self::$throttle_batch_delay);
++					if (!empty($this->Config()->get("throttle_batch_delay"))) {
++						sleep($this->Config()->get("throttle_batch_delay"));
++					}
+ 				} else {
+ 					//mark the send process as complete
+ 					$newsletter->SentDate = SS_Datetime::now()->getValue();
+diff --git a/code/controller/TrackLinkController.php b/code/controller/TrackLinkController.php
+old mode 100644
+new mode 100755
+diff --git a/code/controller/UnsubscribeController.php b/code/controller/UnsubscribeController.php
+old mode 100644
+new mode 100755
+index 8826bc1..561a6fa
+--- a/code/controller/UnsubscribeController.php
++++ b/code/controller/UnsubscribeController.php
+@@ -7,7 +7,7 @@
+  * Create a form that a user can use to unsubscribe from a mailing list
+  */
+ class UnsubscribeController extends Page_Controller {
+-	
++
+ 	static public $days_unsubscribe_link_alive = 30;
+ 
+ 	private static $allowed_actions = array(
+@@ -43,15 +43,25 @@ class UnsubscribeController extends Page_Controller {
+ 		return "unsubscribe/$action";
+ 	}
+ 
++	/**
++	 * finds the recipeitn based on the $_GET variable supplied.
++	 * @return Recipient | NULL
++	 */
+ 	private function getRecipient(){
+-		$validateHash = Convert::raw2sql($this->urlParams['ValidateHash']);
+-		if($validateHash) {
+-			$recipient = Recipient::get()->filter("ValidateHash", $validateHash)->first();
+-			$now = date('Y-m-d H:i:s');
+-			if($now <= $recipient->ValidateHashExpired) return $recipient;
+-		}
++		/**
++		 * the code below has been commented out because we want people to be able to
++		 * unsubscribe even if there are database errors. As long as the right e-mail
++		 * is provided in the $_GET variable, we will unsubscribe them.
++		 */
++		//$validateHash = Convert::raw2sql($this->urlParams['ValidateHash']);
++		//if($validateHash) {
++		//	$recipient = Recipient::get()->filter("ValidateHash", $validateHash)->first();
++		//	$now = date('Y-m-d H:i:s');
++		//	if($now <= $recipient->ValidateHashExpired) return $recipient;
++		//}
++		return Recipient::get()->filter("Email", Convert::raw2sql($_GET["SendEmail"]))->first();
+ 	}
+-	
++
+ 	private function getMailingLists($recipient = null){
+ 		$siteConfig = DataObject::get_one("SiteConfig");
+ 		if($siteConfig->GlobalUnsubscribe){
+@@ -88,17 +98,25 @@ class UnsubscribeController extends Page_Controller {
+ 		if($recipient && $recipient->exists() && $mailinglists && $mailinglists->count()) {
+ 			$unsubscribeRecordIDs = array();
+ 			$this->unsubscribeFromLists($recipient, $mailinglists, $unsubscribeRecordIDs);
+-			$url = Director::absoluteBaseURL() . $this->RelativeLink('done') . "/" . $recipient->ValidateHash . "/" .
+-					implode(",", $unsubscribeRecordIDs);
+-			Controller::curr()->redirect($url, 302);
+-			return $url;
+-		}else{
+-			return $this->customise(array(
+-				'Title' => _t('Newsletter.INVALIDLINK', 'Invalid Link'),
+-				'Content' => _t('Newsletter.INVALIDUNSUBSCRIBECONTENT', 'This unsubscribe link is invalid')
+-			))->renderWith('Page');
++			$validateHash = Convert::raw2sql($this->urlParams['ValidateHash']);
++			if($validateHash) {
++				$recipient = Recipient::get()->filter("ValidateHash", $validateHash)->first();
++				$now = date('Y-m-d H:i:s');
++				if($now <= $recipient->ValidateHashExpired) {
++					$url = Director::absoluteBaseURL() . $this->RelativeLink('done') . "/" . $recipient->ValidateHash . "/" .
++							implode(",", $unsubscribeRecordIDs);
++					Controller::curr()->redirect($url, 302);
++					return $url;
++				}
++			}
++			user_error("Hash did not validate, recipient ID: ".$recipient->ID." hash: ".$validateHash, E_USER_NOTICE );
+ 		}
+-    }
++		//we dont provide any information to the user on whether this is valid...
++		return $this->customise(array(
++			'Title' => _t('Newsletter.INVALIDLINK', 'Could not validate link.'),
++			'Content' => _t('Newsletter.INVALIDUNSUBSCRIBECONTENT', 'We could not validate your unsubscribe link but if it was a valid link you will still be unsubscribed.')
++		))->renderWith('Page');
++	}
+ 
+ 	function done() {
+ 		$unsubscribeRecordIDs = $this->urlParams['IDs'];
+@@ -129,11 +147,11 @@ class UnsubscribeController extends Page_Controller {
+ 				$content = sprintf(
+ 					_t('Newsletter.UNSUBSCRIBEFROMLISTSSUCCESS',
+ 						'<h3>Thank you, %s.</h3><br />You will no longer receive: %s.'),
+-					$title, 
++					$title,
+ 					"<ul>".$listTitles."</ul>"
+ 				);
+ 			}else{
+-				$content = 
++				$content =
+ 					_t('Newsletter.UNSUBSCRIBESUCCESS', 'Thank you.<br />You have been unsubscribed successfully');
+ 			}
+ 		}
+@@ -145,15 +163,12 @@ class UnsubscribeController extends Page_Controller {
+ 		))->renderWith('Page');
+ 	}
+ 
+-   /**
+-    * Unsubscribe the user from the given lists.
+-    */
++	 /**
++		* Unsubscribe the user from the given lists.
++		*/
+ 	function resubscribe() {
+ 		if(isset($_POST['Hash']) && isset($_POST['UnsubscribeRecordIDs'])){
+-			$recipient = DataObject::get_one(
+-				'Recipient', 
+-				"\"ValidateHash\" = '" . Convert::raw2sql($_POST['Hash']) . "'"
+-			);
++			$recipient = Recipient::get()->filter("ValidateHash", Convert::raw2sql($_POST['Hash']));
+ 			$mailinglists = $this->getMailingListsByUnsubscribeRecords($_POST['UnsubscribeRecordIDs']);
+ 			if($recipient && $recipient->exists() && $mailinglists && $mailinglists->count()){
+ 				$recipient->MailingLIsts()->addMany($mailinglists);
+@@ -162,7 +177,8 @@ class UnsubscribeController extends Page_Controller {
+ 					$_POST['UnsubscribeRecordIDs'];
+ 			Controller::curr()->redirect($url, 302);
+ 			return $url;
+-		}else{
++		}
++		else{
+ 			return $this->customise(array(
+ 				'Title' => _t('Newsletter.INVALIDRESUBSCRIBE', 'Invalid resubscrible'),
+ 				'Content' => _t('Newsletter.INVALIDRESUBSCRIBECONTENT', 'This resubscribe link is invalid')
+@@ -179,23 +195,22 @@ class UnsubscribeController extends Page_Controller {
+ 			foreach($mailinglists as $list) {
+ 				$listTitles .= "<li>".$list->Title."</li>";
+ 			}
+-
+ 			$title = $recipient->FirstName?$recipient->FirstName:$recipient->Email;
+ 			$content = sprintf(
+ 				_t('Newsletter.RESUBSCRIBEFROMLISTSSUCCESS',
+ 					'<h3>Thank you. %s!</h3><br />You have been resubscribed to: %s.'),
+-				$title, 
++				$title,
+ 				"<ul>".$listTitles."</ul>"
+ 			);
+-		}else{
+-			$content = 
++		}
++		else{
++			$content =
+ 				_t('Newsletter.RESUBSCRIBESUCCESS', 'Thank you.<br />You have been resubscribed successfully');
+ 		}
+-
+-    	return $this->customise(array(
+-    		'Title' => _t('Newsletter.RESUBSCRIBED', 'Resubscribed'),
+-    		'Content' => $content,
+-    	))->renderWith('Page');
++		return $this->customise(array(
++			'Title' => _t('Newsletter.RESUBSCRIBED', 'Resubscribed'),
++			'Content' => $content,
++		))->renderWith('Page');
+ 	}
+ 
+ 	protected function unsubscribeFromLists($recipient, $lists, &$recordsIDs) {
+@@ -226,31 +241,33 @@ class UnsubscribeController extends Page_Controller {
+ 			if($recipient->ValidateHash){
+ 				$recipient->ValidateHashExpired = date('Y-m-d H:i:s', time() + (86400 * $days));
+ 				$recipient->write();
+-			}else{
++			}
++			else{
+ 				$recipient->generateValidateHashAndStore($days);
+ 			}
+ 
+ 			$templateData = array(
+ 				'FirstName' => $recipient->FirstName,
+-                'UnsubscribeLink' =>
+-                    Director::absoluteBaseURL() . "unsubscribe/index/".$recipient->ValidateHash."/$listIDs"
+-            );
++				'UnsubscribeLink' =>
++					Director::absoluteBaseURL() . "unsubscribe/index/".$recipient->ValidateHash."/$listIDs"
++			);
+ 			//send unsubscribe link email
+ 			$email = new Email();
+ 			$email->setTo($recipient->Email);
+ 			$from = Email::getAdminEmail();
+ 			$email->setFrom($from);
+ 			$email->setTemplate('UnsubscribeLinkEmail');
+-            $email->setSubject(_t(
+-                'Newsletter.ConfirmUnsubscribeSubject',
+-                "Confirmation of your unsubscribe request"
+-            ));
+-            $email->populateTemplate( $templateData );
+-            $email->send();
++			$email->setSubject(_t(
++					'Newsletter.ConfirmUnsubscribeSubject',
++					"Confirmation of your unsubscribe request"
++			));
++			$email->populateTemplate( $templateData );
++			$email->send();
+ 
+ 			$form->sessionMessage(_t('Newsletter.GoodEmailMessage',
+ 				'You have been sent an email containing an unsubscribe link'), "good");
+-		} else {
++		}
++		else {
+ 			//not found Recipient, just reload the form
+ 			$form->sessionMessage(_t('Newsletter.BadEmailMessage','Email address not found'), "bad");
+ 		}
+diff --git a/code/email/NewsletterEmail.php b/code/email/NewsletterEmail.php
+old mode 100644
+new mode 100755
+diff --git a/code/extensions/NewsletterContentControllerExtension.php b/code/extensions/NewsletterContentControllerExtension.php
+old mode 100644
+new mode 100755
+index 09a5a2e..5886fac
+--- a/code/extensions/NewsletterContentControllerExtension.php
++++ b/code/extensions/NewsletterContentControllerExtension.php
+@@ -9,6 +9,8 @@ class NewsletterContentControllerExtension extends Extension{
+ 
+ 	/**
+ 	 * Utility method to get the unsubscribe form
++	 *
++	 * @return Form
+ 	 */
+ 	public static function getUnsubscribeFormObject($self, $fields = null, $actions = null) {
+ 		if (!$fields) $fields = FieldList::create();
+@@ -16,7 +18,10 @@ class NewsletterContentControllerExtension extends Extension{
+ 		return new Form($self, 'unsubscribeLink', $fields, $actions);
+ 	}
+ 
+-
++	/**
++	 *
++	 * @return Form
++	 */
+ 	public function UnsubscribeRequestForm() {
+ 		$fields = new FieldList(
+ 			EmailField::create('email',_t("Newsletter.UnsubscribeEmail","Your subscription email address"))
+@@ -41,4 +46,4 @@ class NewsletterContentControllerExtension extends Extension{
+ 		return $form;
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/code/extensions/NewsletterSiteConfig.php b/code/extensions/NewsletterSiteConfig.php
+old mode 100644
+new mode 100755
+diff --git a/code/form/CheckboxSetWithExtraField.php b/code/form/CheckboxSetWithExtraField.php
+old mode 100644
+new mode 100755
+diff --git a/code/form/gridfield/GridFieldAutocompleterWithFilter.php b/code/form/gridfield/GridFieldAutocompleterWithFilter.php
+old mode 100644
+new mode 100755
+index 1a6ca91..4a1f5b5
+--- a/code/form/gridfield/GridFieldAutocompleterWithFilter.php
++++ b/code/form/gridfield/GridFieldAutocompleterWithFilter.php
+@@ -1,4 +1,4 @@
+-<?php 
++<?php
+ /**
+  * @package  newsletter
+  */
+@@ -30,13 +30,13 @@ class GridFieldAutocompleterWithFilter extends GridFieldAddExistingAutocompleter
+ 	 * Returns a json array of a search results that can be used by for example Jquery.ui.autosuggestion
+ 	 *
+ 	 * @param GridField $gridField
+-	 * @param SS_HTTPRequest $request 
++	 * @param SS_HTTPRequest $request
+ 	 * @return sting in JSON fromat
+ 	 */
+ 	public function doSearch($gridField, $request) {
+ 		$dataClass = $gridField->getList()->dataClass();
+ 		$allList = $this->searchList ? $this->searchList : DataList::create($dataClass);
+-		
++
+ 		$searchFields = ($this->getSearchFields())
+ 			? $this->getSearchFields()
+ 			: $this->scaffoldSearchFields($dataClass);
+@@ -79,4 +79,4 @@ class GridFieldAutocompleterWithFilter extends GridFieldAddExistingAutocompleter
+ 		return Convert::array2json($json);
+ 	}
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/code/form/gridfield/GridFieldNewsletterSummaryHeader.php b/code/form/gridfield/GridFieldNewsletterSummaryHeader.php
+old mode 100644
+new mode 100755
+diff --git a/code/form/gridfield/NewsletterGridFieldDetailForm.php b/code/form/gridfield/NewsletterGridFieldDetailForm.php
+old mode 100644
+new mode 100755
+index 30ee761..dc859f4
+--- a/code/form/gridfield/NewsletterGridFieldDetailForm.php
++++ b/code/form/gridfield/NewsletterGridFieldDetailForm.php
+@@ -61,7 +61,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
+ 
+ 	/**
+ 	 * Used for preview controls
+-	 * 
++	 *
+ 	 * @return ArrayData
+ 	 */
+ 	public function getSilverStripeNavigator() {
+@@ -93,7 +93,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
+ 	 */
+ 	public function emailpreview(SS_HTTPRequest $request = null) {
+ 		$emailVar = $request->getVar('email');
+-		
++
+ 		$recipient = new Recipient(Recipient::$test_data);
+ 		if ($request && !empty($emailVar)) {
+ 			$recipient->Email = Convert::raw2js($emailVar);
+@@ -182,6 +182,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
+ 	}
+ 
+ 	public function doSend($data, $form){
++		set_time_limit(600);
+ 		//copied from parent
+ 		$new_record = $this->record->ID == 0;
+ 		$controller = Controller::curr();
+@@ -191,7 +192,8 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
+ 			$this->record->Status = 'Sending';  //custom: changing the status of to indicate we are sending
+ 			$this->record->write();
+ 			$this->gridField->getList()->add($this->record);
+-		} catch(ValidationException $e) {
++		}
++		catch(ValidationException $e) {
+ 			$form->sessionMessage($e->getResult()->message(), 'bad');
+ 			$responseNegotiator = new PjaxResponseNegotiator(array(
+ 				'CurrentForm' => function() use(&$form) {
+@@ -223,11 +225,13 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
+ 
+ 		if($new_record) {
+ 			return Controller::curr()->redirect($this->Link());
+-		} elseif($this->gridField->getList()->byId($this->record->ID)) {
++		}
++		elseif($this->gridField->getList()->byId($this->record->ID)) {
+ 			// Return new view, as we can't do a "virtual redirect" via the CMS Ajax
+ 			// to the same URL (it assumes that its content is already current, and doesn't reload)
+ 			return $this->edit(Controller::curr()->getRequest());
+-		} else {
++		}
++		else {
+ 			// Changes to the record properties might've excluded the record from
+ 			// a filtered list, so return back to the main view if it can't be found
+ 			$noActionURL = $controller->removeAction($data['url']);
+diff --git a/code/model/MailingList.php b/code/model/MailingList.php
+old mode 100644
+new mode 100755
+index ab50f70..bd9b5d1
+--- a/code/model/MailingList.php
++++ b/code/model/MailingList.php
+@@ -4,22 +4,22 @@
+  */
+ 
+ /**
+- * Represents a specific containner of newsletter recipients 
++ * Represents a specific containner of newsletter recipients
+  */
+ class MailingList extends DataObject {
+ 
+ 	/* the database fields */
+ 	private static $db = array(
+-		'Title'					=> "Varchar",
++		'Title' => "Varchar(255)",
+ 	);
+ 
+ 	/* a mailing list could contains many newsletter recipients */
+ 	private static $many_many = array(
+-		'Recipients'			=> "Recipient",
++		'Recipients' => "Recipient",
+ 	);
+ 
+ 	private static $belongs_many_many = array(
+-		'Newsletters'			=> "Newsletter",
++		'Newsletters' => "Newsletter",
+ 	);
+ 
+ 	private static $singular_name = 'Mailinglist';
+@@ -37,14 +37,12 @@ class MailingList extends DataObject {
+ 
+ 	public function fieldLabels($includelrelations = true) {
+ 		$labels = parent::fieldLabels($includelrelations);
+-		
+ 		$labels["Title"] = _t('Newsletter.FieldTitle', "Title");
+ 		$labels["FullTitle"] = _t('Newsletter.FieldTitle', "Title");
+ 		$labels["ActiveRecipients.Count"] = _t('Newsletter.Recipients', "Recipients");
+-		
+ 		return $labels;
+ 	}
+-	
++
+ 	function getCMSFields() {
+ 		$fields = new FieldList();
+ 		$fields->push(new TabSet("Root", $mainTab = new Tab("Main")));
+@@ -63,7 +61,9 @@ class MailingList extends DataObject {
+ 			new GridFieldAddNewButton(),
+ 			new GridFieldDetailForm(),
+ 			new GridFieldEditButton(),
+-			$autocompelete = new GridFieldAutocompleterWithFilter('before',	array(
++			$autocompelete = new GridFieldAutocompleterWithFilter(
++				'before',
++				array(
+ 					'FirstName',
+ 					'MiddleName',
+ 					'Surname',
+@@ -91,13 +91,18 @@ class MailingList extends DataObject {
+ 
+ 		$fields->addFieldToTab('Root.Main',new FieldGroup($recipientsGrid));
+ 		$this->extend("updateCMSFields", $fields);
+-		
++
+ 		if(!$this->ID)
+ 			$fields->removeByName('Recipients');
+ 
+ 		return $fields;
+ 	}
+ 
++	/**
++	 * returns name with number of recipients between brackets
++	 * e.g. MyList(2)
++	 * @return String
++	 */
+ 	public function getFullTitle() {
+ 		return sprintf(
+ 			'%s (%s)',
+@@ -112,11 +117,14 @@ class MailingList extends DataObject {
+ 
+ 	/**
+ 	 * Returns all recipients who aren't blacklisted, and are verified.
++	 *
++	 * @return DataList
+ 	 */
+ 	public function ActiveRecipients() {
+ 		if($this->Recipients()  instanceof UnsavedRelationList ) {
+-			return new ArrayList();
++			return Recipients::get()->filter(array("ID" => 0));
+ 		}
+-		return $this->Recipients()->exclude('Blacklisted', 1)->exclude('Verified', 0);
++		return $this->Recipients()->exclude(array('Blacklisted' => 1, 'Verified' => 0));
+ 	}
++
+ }
+diff --git a/code/model/Newsletter.php b/code/model/Newsletter.php
+old mode 100644
+new mode 100755
+index 35257af..4c4e85d
+--- a/code/model/Newsletter.php
++++ b/code/model/Newsletter.php
+@@ -4,27 +4,27 @@
+  */
+ 
+ /**
+- * Single newsletter instance. 
++ * Single newsletter instance.
+  */
+ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 	private static $db = array(
+-		"Status"				=> "Enum('Draft, Sending, Sent', 'Draft')",
+-		"Subject"				=> "Varchar(255)",
+-		"Content"				=> "HTMLText",
+-		"SentDate"				=> "Datetime",
+-		"SendFrom"				=> "Varchar(255)",
+-		"ReplyTo"				=> "Varchar(255)",
+-		"RenderTemplate"		=> "Varchar",
++		"Status"             => "Enum('Draft, Sending, Sent', 'Draft')",
++		"Subject"            => "Varchar(255)",
++		"Content"            => "HTMLText",
++		"SentDate"           => "Datetime",
++		"SendFrom"           => "Varchar(255)",
++		"ReplyTo"            => "Varchar(255)",
++		"RenderTemplate"     => "Varchar(255)",
+ 	);
+ 
+ 	private static $has_many = array(
+-		"SendRecipientQueue"	=> "SendRecipientQueue",
+-		"TrackedLinks"			=> "Newsletter_TrackedLink"
++		"SendRecipientQueue" => "SendRecipientQueue",
++		"TrackedLinks"       => "Newsletter_TrackedLink"
+ 	);
+ 
+ 	private static $many_many = array(
+-		"MailingLists"			=> "MailingList"
++		"MailingLists"       => "MailingList"
+ 	);
+ 
+ 	private static $searchable_fields = array(
+@@ -44,16 +44,22 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 		"Status"
+ 	);
+ 
+-	static $required_fields = array(
+-		'Subject', 'SendFrom'
++	private static $required_fields = array(
++		'Subject',
++		'SendFrom'
+ 	);
+ 
+-	static $required_relations = array(
++	private static $required_relations = array(
+ 		'MailingLists'
+ 	);
+ 
+-	private static $field_labels = array();
+-	
++	/**
++	 * Default .ss template for sending newsletters.
++	 *
++	 * @var String
++	 */
++	private static $default_render_template = "SimpleNewsletterTemplate";
++
+ 	public function fieldLabels($includelrelations = true) {
+ 		$labels = parent::fieldLabels($includelrelations);
+ 
+@@ -68,23 +74,25 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 	public function validate() {
+ 		$result = parent::validate();
+-
+-		foreach(self::$required_fields as $field) {
++		$fieldLabels = $this->fieldLabels();
++		foreach($this->Config()->get("required_fields") as $field) {
+ 			if (empty($this->$field)) {
+ 				$result->error(_t('Newsletter.FieldRequired',
+ 					'"{field}" field is required',
+-						array('field' => isset(self::$field_labels[$field])?self::$field_labels[$field]:$field)
++						array('field' => isset($field_labels[$field]) ? $field_labels[$field] : $field)
+ 				));
+ 			}
+ 		}
+-
+ 		if (!empty($this->ID)) {
+-			foreach(self::$required_relations as $relation) {
++			foreach($this->Config()->get("required_relations") as $relation) {
+ 				if ($this->$relation()->Count() == 0) {
+-					$result->error(_t('Newsletter.RelationRequired',
+-						'Select at least one "{relation}"',
++					$result->error(
++						_t(
++							'Newsletter.RelationRequired',
++							'Select at least one "{relation}"',
+ 							array('relation' => $relation)
+-					));
++						)
++					);
+ 				}
+ 			}
+ 		}
+@@ -92,6 +100,11 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 		return $result;
+ 	}
+ 
++	function populateDefaults(){
++		parent::populateDefaults();
++		$this->RenderTemplate = $this->Config()->get("default_render_template");
++	}
++
+ 	/**
+ 	 * Returns a FieldSet with which to create the CMS editing form.
+ 	 * You can use the extend() method of FieldSet to create customised forms for your other
+@@ -109,7 +122,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 			new ReadonlyField('Status', $this->fieldLabel('Status')),
+ 			'Subject'
+ 		);
+-		
++
+ 		$fields->removeByName("SentDate");
+ 		if ($this->Status == "Sent") {
+ 			$fields->addFieldToTab(
+@@ -127,7 +140,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 			->setValue(Email::getAdminEmail())
+ 			->setAttribute('placeholder', 'admin@example.org')
+ 			->setDescription(_t(
+-				'Newsletter.ReplyToDesc', 
++				'Newsletter.ReplyToDesc',
+ 				'Any undeliverable emails will be collected in this mailbox'
+ 			));
+ 
+@@ -136,8 +149,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 		$fields->removeByName('TrackedLinks');
+ 
+ 		if($this->Status != 'Sent') {
+-			$contentHelp = '<strong>' 
+-				. _t('Newsletter.FormattingHelp', 'Formatting Help') 
++			$contentHelp = '<strong>'
++				. _t('Newsletter.FormattingHelp', 'Formatting Help')
+ 				. '</strong><br />';
+ 			$contentHelp .= '<ul>';
+ 			foreach($this->getAvailablePlaceholders() as $title => $description) {
+@@ -152,45 +165,46 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 		$templateSource = $this->templateSource();
+ 		if(count($templateSource) > 1) {
+ 			$fields->replaceField(
+-				"RenderTemplate", 
++				"RenderTemplate",
+ 				new DropdownField("RenderTemplate", _t('NewsletterAdmin.RENDERTEMPLATE',
+-					'Template the newsletter render to'), 
++					'Template the newsletter render to'),
+ 				$templateSource)
+-			);	
++			);
+ 
+ 			$explanationTitle = _t("Newletter.TemplateExplanationTitle",
+ 				"Select a styled template (.ss template) that this newsletter renders with"
+ 			);
+ 			$fields->insertBefore(
+-				LiteralField::create("TemplateExplanationTitle", "<h5>$explanationTitle</h5>"), 
++				LiteralField::create("TemplateExplanationTitle", "<h5>$explanationTitle</h5>"),
+ 				"RenderTemplate"
+ 			);
+ 			if(!$this->ID) {
+-				$explanation1 = _t("Newletter.TemplateExplanation1", 
++				$explanation1 = _t("Newletter.TemplateExplanation1",
+ 					'You should make your own styled SilverStripe templates	make sure your templates have a'
+ 					. '$Body coded so the newletter\'s content could be clearly located in your templates'
+ 				);
+-				$explanation2 = _t("Newletter.TemplateExplanation2", 
++				$explanation2 = _t("Newletter.TemplateExplanation2",
+ 					"Make sure your newsletter templates could be looked up in the dropdown list below by
+-					either placing them under your theme directory,	e.g. themes/mytheme/templates/email/
++					either placing them under your theme directory, e.g. themes/mytheme/templates/email/
+ 					");
+-				$explanation3 = _t("Newletter.TemplateExplanation3", 
++				$explanation3 = _t("Newletter.TemplateExplanation3",
+ 					"or under your project directory e.g. mysite/templates/email/
+ 					");
+ 				$fields->insertBefore(
+-					LiteralField::create("TemplateExplanation1", "<p class='help'>$explanation1</p>"), 
++					LiteralField::create("TemplateExplanation1", "<p class='help'>$explanation1</p>"),
+ 					"RenderTemplate"
+ 				);
+ 				$fields->insertBefore(
+ 					LiteralField::create(
+-						"TemplateExplanation2", 
++						"TemplateExplanation2",
+ 						"<p class='help'>$explanation2<br />$explanation3</p>"
+-					), 
++					),
+ 					"RenderTemplate"
+ 				);
+ 			}
+-		} else {
+-			$fields->replaceField("RenderTemplate", 
++		}
++		else {
++			$fields->replaceField("RenderTemplate",
+ 				new HiddenField('RenderTemplate', false, key($templateSource))
+ 			);
+ 		}
+@@ -201,8 +215,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 			$fields->addFieldToTab("Root.Main",
+ 				new CheckboxSetField(
+-					"MailingLists", 
+-					_t('Newsletter.SendTo', "Send To", 'Selects mailing lists from set of checkboxes'), 
++					"MailingLists",
++					_t('Newsletter.SendTo', "Send To", 'Selects mailing lists from set of checkboxes'),
+ 					$mailinglists->map('ID', 'FullTitle')
+ 				)
+ 			);
+@@ -225,9 +239,9 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 			//Create the Sent To Queue grid
+ 			if (class_exists("GridFieldAjaxRefresh") && $this->SendRecipientQueue()->exists()) {
+ 				//only use auto-refresh if there is a send out currently in-progress, otherwise no-point
+-				if ($this->SendRecipientQueue()->filter(
+-					array('Status'=>array('Scheduled','InProgress')))->count() > 0) {
+-					$gridFieldConfig->addComponent(new GridFieldAjaxRefresh(5000,true));
++				$countOfScheduledOrInProgressMails = $this->SendRecipientQueue()->filter(array('Status'=> array('Scheduled','InProgress')))->count();
++				if ($countOfScheduledOrInProgressMails > 0) {
++					$gridFieldConfig->addComponent(new GridFieldAjaxRefresh(5000, true));
+ 				}
+ 			}
+ 
+@@ -247,13 +261,14 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 					Director::absoluteBaseURL(),
+ 					'dev/tasks/NewsletterSendController?newsletter='.$this->ID
+ 				);
+-				$fields->addFieldToTab('Root.SentTo',
++				$fields->addFieldToTab(
++					'Root.SentTo',
+ 					new LiteralField(
+ 						'RestartQueue',
+ 						sprintf(
+ 							'<a href="%s" class="ss-ui-button" data-icon="arrow-circle-double">%s</a>',
+ 							$restartLink,
+-							_t('Newsletter.RestartQueue', 'Restart queue processing')	
++							_t('Newsletter.RestartQueue', 'Restart queue processing')
+ 						)
+ 					)
+ 				);
+@@ -261,7 +276,9 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 			//only show the TrackedLinks tab, if there are tracked links in the newsletter and the status is "Sent"
+ 			if($this->TrackedLinks()->count() > 0) {
+-				$fields->addFieldToTab('Root.TrackedLinks',GridField::create(
++				$fields->addFieldToTab(
++					'Root.TrackedLinks',
++					GridField::create(
+ 						'TrackedLinks',
+ 						_t('NewsletterAdmin.TrackedLinks', 'Tracked Links'),
+ 						$this->TrackedLinks(),
+@@ -270,14 +287,11 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 				);
+ 			}
+ 		}
+-
+-
+-
+ 		return $fields;
+ 	}
+ 
+ 	/**
+-	 * return array containing all possible email templates file name 
++	 * return array containing all possible email templates file name
+ 	 * under the folders of both theme and project specific folder.
+ 	 *
+ 	 * @return array
+@@ -285,8 +299,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 	public function templateSource(){
+ 		$paths = NewsletterAdmin::template_paths();
+ 
+-		$templates = array( 
+-			"SimpleNewsletterTemplate" => _t('TemplateList.SimpleNewsletterTemplate', 'Simple Newsletter Template')
++		$templates = array(
++			$this->Config()->get("default_render_template") => _t('TemplateList.SimpleNewsletterTemplate', 'Simple Newsletter Template')
+ 		);
+ 
+ 		if(isset($paths) && is_array($paths)){
+@@ -325,11 +339,11 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 	public function getAvailablePlaceholders() {
+ 		return array(
+ 			'UnsubscribeLink' => _t(
+-				'Newsletter.PlaceholderUnsub', 
++				'Newsletter.PlaceholderUnsub',
+ 				'Personalized link to unsubscribe from newsletter'
+ 			),
+ 			'AbsoluteBaseURL' => _t(
+-				'Newsletter.PlaceholderAbsoluteUrl', 
++				'Newsletter.PlaceholderAbsoluteUrl',
+ 				'Absolute URL to the website'
+ 			),
+ 			'To' => _t(
+@@ -377,7 +391,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 	function render() {
+ 		if(!$templateName = $this->RenderTemplate) {
+-			$templateName = 'SimpleNewsletterTemplate';
++			$templateName = $this->Config()->get("default_render_template");
+ 		}
+ 		// Block stylesheets and JS that are not required (email templates should have inline CSS/JS)
+ 		Requirements::clear();
+@@ -398,7 +412,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
+ 
+ 	function getContentBody(){
+ 		$content = $this->obj('Content');
+-		
++
+ 		$this->extend("updateContentBody", $content);
+ 		return $content;
+ 	}
+@@ -445,13 +459,13 @@ class Newsletter extends DataObject implements CMSPreviewable{
+  * @package newsletter
+  */
+ class Newsletter_TrackedLink extends DataObject {
+-	
++
+ 	private static $db = array(
+ 		'Original' => 'Varchar(255)',
+ 		'Hash' => 'Varchar(100)',
+ 		'Visits' => 'Int'
+ 	);
+-	
++
+ 	private static $has_one = array(
+ 		'Newsletter' => 'Newsletter'
+ 	);
+@@ -461,13 +475,13 @@ class Newsletter_TrackedLink extends DataObject {
+ 		"Original" => "Link URL",
+ 		"Visits" => "Visit Counts"
+ 	);
+-	
++
+ 	/**
+ 	 * Generate a unique hash
+ 	 */
+ 	function onBeforeWrite() {
+ 		parent::onBeforeWrite();
+-		
++
+ 		if(!$this->Hash) $this->Hash = md5(time() + rand());
+ 	}
+ 
+@@ -479,7 +493,7 @@ class Newsletter_TrackedLink extends DataObject {
+ 	 */
+ 	function Link() {
+ 		if(!$this->Hash) $this->write();
+-		
++
+ 		return 'newsletterlinks/'. $this->Hash;
+ 	}
+ }
+diff --git a/code/model/Newsletter_Sent.php b/code/model/Newsletter_Sent.php
+old mode 100644
+new mode 100755
+diff --git a/code/model/Recipient.php b/code/model/Recipient.php
+old mode 100644
+new mode 100755
+index c5b053e..1a5269f
+--- a/code/model/Recipient.php
++++ b/code/model/Recipient.php
+@@ -9,38 +9,37 @@
+ class Recipient extends DataObject {
+ 
+ 	private static $db = array(
+-		'Email'					=> "Varchar(255)",
+-		'FirstName'				=> "Varchar(255)",
+-		'MiddleName'			=> "Varchar(255)",
+-		'Surname'				=> "Varchar(255)",
+-		'Salutation'			=> "Varchar(255)",
+-		'BouncedCount'	    	=> "Int", // if 0, never been bounced
+-		'Blacklisted'			=> "Boolean",
++		'Email'                => "Varchar(255)",
++		'FirstName'            => "Varchar(255)",
++		'MiddleName'           => "Varchar(255)",
++		'Surname'              => "Varchar(255)",
++		'Salutation'           => "Varchar(255)",
++		'BouncedCount'         => "Int", // if 0, never been bounced
++		'Blacklisted'          => "Boolean",
+ 		// everytime, one of its belonged mailing lists is selected when sending the newletter,
+ 		// plus one to the count, if belong to more than one
+ 		// mailing lists that has been selected when sending the newletter, counts as '1'.
+-		'ReceivedCount'			=> "Int",
+-
+-		// both subscribe and unsebscribe process need to valid this hash for security
+-		'ValidateHash'			=> "Varchar(160)",
+-		'ValidateHashExpired'	=> "SS_Datetime",
+-		'Verified'				=> "Boolean(1)",
++		'ReceivedCount'        => "Int",
++		// subscribe, resubscribe, and unsubscribe process need to valid this hash for security
++		'ValidateHash'         => "Varchar(160)",
++		'ValidateHashExpired'  => "SS_Datetime",
++		'Verified'             => "Boolean(1)"
+ 	);
+ 
+ 	// a newsletter recipient could belong to many mailing lists.
+ 	private static $belongs_many_many = array(
+-		'MailingLists'			=> 'MailingList',
++		'MailingLists' => 'MailingList',
+ 	);
+ 	private static $has_many = array(
+ 		'SendRecipientQueue' => 'SendRecipientQueue',
+ 	);
+ 
+ 	private static $indexes = array(
+-		'Email'					=> true,
+-		'ReceivedCount'			=> true,
++		'Email' => true,
++		'ReceivedCount' => true,
+ 	);
+ 
+-	private static $default_sort = '"FirstName", "Surname"';
++	private static $default_sort = '"FirstName" ASC, "Surname" ASC';
+ 
+ 	/**
+ 	 *
+@@ -60,13 +59,13 @@ class Recipient extends DataObject {
+ 	);
+ 
+ 	private static $summary_fields = array(
+-		'FirstName'			=> 'First Name',
+-		'Surname'			=> 'Last Name',
+-		'Email'				=> 'Email',
+-		'Blacklisted'		=> 'Blacklisted',
+-		'BouncedCount'		=> 'Bounced Count',
+-		'ReceivedCount'		=> 'Count for Received newsletters'
+-	);
++		'FirstName'       => 'First Name',
++		'Surname'         => 'Last Name',
++		'Email'           => 'Email',
++		'Blacklisted'     => 'Blacklisted',
++		'BouncedCount'    => 'Bounced Count',
++		'ReceivedCount'   => 'Count for Received newsletters'
++  );
+ 
+ 	/**
+ 	 * @var array Data used for test emails and previews.
+@@ -102,7 +101,7 @@ class Recipient extends DataObject {
+ 	/**
+ 	 * The unique field used to identify this recipient.
+ 	 * Duplication will not be allowed for this feild.
+-	 * 
++	 *
+ 	 * @var string
+ 	 */
+ 	protected static $unique_identifier_field = 'Email';
+@@ -112,14 +111,14 @@ class Recipient extends DataObject {
+ 	 */
+ 	public function onBeforeWrite() {
+ 		// If a recipient with the same "unique identifier" already exists with a different ID, don't allow merging.
+-		// Note: This does not a full replacement for safeguards in the controller layer (e.g. in a subscription form), 
++		// Note: This does not a full replacement for safeguards in the controller layer (e.g. in a subscription form),
+ 		// but rather a last line of defense against data inconsistencies.
+ 		$identifierField = self::$unique_identifier_field;
+ 		if($this->$identifierField) {
+ 			// Note: Same logic as Member_Validator class
+ 			$idClause = ($this->ID) ? sprintf(" AND \"Recipient\".\"ID\" <> %d", (int)$this->ID) : '';
+ 			$existingRecord = DataObject::get_one(
+-				'Recipient', 
++				'Recipient',
+ 				sprintf(
+ 					"\"%s\" = '%s' %s",
+ 					$identifierField,
+@@ -129,8 +128,8 @@ class Recipient extends DataObject {
+ 			);
+ 			if($existingRecord) {
+ 				throw new ValidationException(new ValidationResult(false, _t(
+-					'Recipient.ValidationIdentifierFailed', 
+-					'Can\'t overwrite existing recipient #{id} with identical identifier ({name} = {value}))', 
++					'Recipient.ValidationIdentifierFailed',
++					'Can\'t overwrite existing recipient #{id} with identical identifier ({name} = {value}))',
+ 					'Values in brackets show "fieldname = value", usually denoting an existing email address',
+ 					array(
+ 						'id' => $existingRecord->ID,
+@@ -163,7 +162,7 @@ class Recipient extends DataObject {
+ 
+ 		if (!empty($this->ID)) {
+ 			$fields->addFieldToTab('Root.Main',
+-				Object::create('CheckboxSetField', 
++				Object::create('CheckboxSetField',
+ 					'MailingLists',
+ 					$this->fieldLabel('MailingLists'),
+ 					MailingList::get()->map('ID', 'FullTitle')
+@@ -181,7 +180,7 @@ class Recipient extends DataObject {
+ 				Object::create('CheckboxField', 'Blacklisted',$this->fieldLabel('Blacklisted'))
+ 					->setDescription(
+ 						_t(
+-							'Newsletter.BlacklistedDesc', 
++							'Newsletter.BlacklistedDesc',
+ 							'Excluded from emails, either by automated process or manually. '
+ 							. 'An invalid address or undeliverable email will eventually result in blacklisting.'
+ 						)
+@@ -189,14 +188,14 @@ class Recipient extends DataObject {
+ 				Object::create('ReadonlyField', 'ReceivedCount',$this->fieldLabel('ReceivedCount'))
+ 					->setDescription(
+ 						_t(
+-							'Newsletter.ReceivedCountDesc', 
++							'Newsletter.ReceivedCountDesc',
+ 							'Number of emails sent without undeliverable errors. '
+ 							. 'Only one indication that an email has actually been received and read.'
+ 						)
+ 					)
+ 			)
+ 		);
+-		
++
+ 		$this->extend('updateCMSFields', $fields);
+ 
+ 		return $fields;
+diff --git a/code/model/SendRecipientQueue.php b/code/model/SendRecipientQueue.php
+old mode 100644
+new mode 100755
+index 777c0ca..9d4e266
+--- a/code/model/SendRecipientQueue.php
++++ b/code/model/SendRecipientQueue.php
+@@ -7,9 +7,17 @@
+  * Database record for recipients that have had the newsletter sent to them, or are about to have a newsletter sent.
+  */
+ class SendRecipientQueue extends DataObject {
++
++	private static $forced_delay = 2;
++
+ 	/**
+-	 *	Status has 4 possible values: "Sent", (mail() returned TRUE), "Failed" (mail() returned FALSE),
+-	 * 	"Bounced" ({@see $email_bouncehandler}), or "BlackListed" (sending to is disabled).
++	 *	Status has 6 possible values:
++	 * "Scheduled" - not sent yet
++	 * "InProgress" - being sent
++	 * "Sent", (mail() returned TRUE),
++	 * "Failed" (mail() returned FALSE),
++	 * "Bounced" ({@see $email_bouncehandler}), or
++	 * "BlackListed" (sending to is disabled) - this does NOT necessarily mean the Recipient is Blacklisted!
+ 	 */
+ 	private static $db = array(
+ 		"Status" => "Enum('Scheduled, InProgress, Sent, Failed, Bounced, BlackListed', 'Scheduled')",
+@@ -51,26 +59,35 @@ class SendRecipientQueue extends DataObject {
+ 	public function send($newsletter = null, $recipient = null) {
+ 		if (empty($newsletter)) $newsletter = $this->Newsletter();
+ 		if (empty($recipient)) $recipient = $this->Recipient();
+-
++		//we sleep for at least one second before any send.
++		//this reduced the max send rate to 3600 emails per hour
++		if($sleep = $this->Config()->get("forced_delay")) {
++			sleep($sleep);
++		}
++		$recipient = Recipient::get()->byID($this->RecipientID);
+ 		//check recipient not blacklisted and verified
+ 		if ($recipient && empty($recipient->Blacklisted) && !empty($recipient->Verified)) {
+-			$email = new NewsLetterEmail(
+-				$newsletter,
+-				$recipient
+-			);
+-			if (!empty($newsletter->ReplyTo)) $email->addCustomHeader('Reply-To', $newsletter->ReplyTo);
+-
+-			$success = $email->send();
+-
+-			if ($success) {
+-				$this->Status = 'Sent';
+-				$recipient->ReceivedCount = $recipient->ReceivedCount + 1;
+-			}
+-			else {
+-				$this->Status = 'Failed';
+-				$recipient->BouncedCount = $recipient->BouncedCount + 1;
++			//only send if it is InProgress - we send it, we dont want to double-send anything
++			//and we want to be very sure about this.
++			if($this->Status == "InProgress") {
++				$email = new NewsLetterEmail(
++					$newsletter,
++					$recipient
++				);
++				if (!empty($newsletter->ReplyTo)) {
++					$email->addCustomHeader('Reply-To', $newsletter->ReplyTo);
++				}
++				$success = $email->send();
++				if ($success) {
++					$this->Status = 'Sent';
++					$recipient->ReceivedCount = $recipient->ReceivedCount + 1;
++				}
++				else {
++					$this->Status = 'Failed';
++					$recipient->BouncedCount = $recipient->BouncedCount + 1;
++				}
++				$recipient->write();
+ 			}
+-			$recipient->write();
+ 		}
+ 		else {
+ 			$this->Status = 'BlackListed';
+diff --git a/code/model/UnsubscribeRecord.php b/code/model/UnsubscribeRecord.php
+old mode 100644
+new mode 100755
+index 8bf9890..b41556e
+--- a/code/model/UnsubscribeRecord.php
++++ b/code/model/UnsubscribeRecord.php
+@@ -8,6 +8,7 @@
+  * unsubscribed from a {@link MailingList}.
+  */
+ class UnsubscribeRecord extends DataObject {
++
+ 	private static $has_one = array(
+ 		'MailingList' => 'MailingList',
+ 		'Recipient' => 'Recipient'
+@@ -30,4 +31,5 @@ class UnsubscribeRecord extends DataObject {
+ 			: $mailinglist->ID;
+ 		$this->write();
+ 	}
+-}
+\ No newline at end of file
++
++}
+diff --git a/code/pagetypes/SubscriptionPage.php b/code/pagetypes/SubscriptionPage.php
+old mode 100644
+new mode 100755
+diff --git a/code/pagetypes/UnsubscribePage.php b/code/pagetypes/UnsubscribePage.php
+old mode 100644
+new mode 100755
+diff --git a/composer.json b/composer.json
+old mode 100644
+new mode 100755
+diff --git a/config.rb b/config.rb
+old mode 100644
+new mode 100755
+diff --git a/css/CheckboxSetWithExtraField.css b/css/CheckboxSetWithExtraField.css
+old mode 100644
+new mode 100755
+diff --git a/css/NewsletterAdmin.css b/css/NewsletterAdmin.css
+old mode 100644
+new mode 100755
+diff --git a/css/SubscriptionPage.css b/css/SubscriptionPage.css
+old mode 100644
+new mode 100755
+diff --git a/docs/newsletter-state-flow.png b/docs/newsletter-state-flow.png
+old mode 100644
+new mode 100755
+diff --git a/images/drag.gif b/images/drag.gif
+old mode 100644
+new mode 100755
+diff --git a/images/drag_readonly.gif b/images/drag_readonly.gif
+old mode 100644
+new mode 100755
+diff --git a/images/newsletter-icon.png b/images/newsletter-icon.png
+old mode 100644
+new mode 100755
+diff --git a/javascript/ActionOnConfirmation.js b/javascript/ActionOnConfirmation.js
+old mode 100644
+new mode 100755
+diff --git a/javascript/CheckboxSetWithExtraField.js b/javascript/CheckboxSetWithExtraField.js
+old mode 100644
+new mode 100755
+diff --git a/javascript/NewsletterAdminEmailPreview.js b/javascript/NewsletterAdminEmailPreview.js
+old mode 100644
+new mode 100755
+diff --git a/javascript/SubscriptionPage.js b/javascript/SubscriptionPage.js
+old mode 100644
+new mode 100755
+diff --git a/lang/ar.yml b/lang/ar.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/bg.yml b/lang/bg.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/bs.yml b/lang/bs.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ca.yml b/lang/ca.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/cs.yml b/lang/cs.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/da.yml b/lang/da.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/de.yml b/lang/de.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/en.yml b/lang/en.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/en_GB.yml b/lang/en_GB.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/eo.yml b/lang/eo.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/es.yml b/lang/es.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/es_MX.yml b/lang/es_MX.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/et_EE.yml b/lang/et_EE.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/fi.yml b/lang/fi.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/fr.yml b/lang/fr.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/he_IL.yml b/lang/he_IL.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/hr.yml b/lang/hr.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/hu.yml b/lang/hu.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/id.yml b/lang/id.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/it.yml b/lang/it.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ja_JP.yml b/lang/ja_JP.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ms.yml b/lang/ms.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/nb.yml b/lang/nb.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ne.yml b/lang/ne.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/nl.yml b/lang/nl.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/pa.yml b/lang/pa.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/pl.yml b/lang/pl.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/pt.yml b/lang/pt.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/pt_BR.yml b/lang/pt_BR.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ro.yml b/lang/ro.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/ru.yml b/lang/ru.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/si.yml b/lang/si.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/sk.yml b/lang/sk.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/sl.yml b/lang/sl.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/sr.yml b/lang/sr.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/sv.yml b/lang/sv.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/tr.yml b/lang/tr.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/uk.yml b/lang/uk.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/zh_CN.yml b/lang/zh_CN.yml
+old mode 100644
+new mode 100755
+diff --git a/lang/zh_TW.yml b/lang/zh_TW.yml
+old mode 100644
+new mode 100755
+diff --git a/migration/0.5-to-1.0.sql b/migration/0.5-to-1.0.sql
+old mode 100644
+new mode 100755
+diff --git a/scss/CheckboxSetWithExtraField.scss b/scss/CheckboxSetWithExtraField.scss
+old mode 100644
+new mode 100755
+diff --git a/scss/NewsletterAdmin.scss b/scss/NewsletterAdmin.scss
+old mode 100644
+new mode 100755
+diff --git a/scss/SubscriptionPage.scss b/scss/SubscriptionPage.scss
+old mode 100644
+new mode 100755
+diff --git a/tasks/DeleteUnverifiedRecipientsTask.php b/tasks/DeleteUnverifiedRecipientsTask.php
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/NewsletterAdmin_SilverStripeNavigator.ss b/templates/Includes/NewsletterAdmin_SilverStripeNavigator.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/NewsletterFooter.ss b/templates/Includes/NewsletterFooter.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/NewsletterHeader.ss b/templates/Includes/NewsletterHeader.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/SubscriptionCompleted.ss b/templates/Includes/SubscriptionCompleted.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/SubscriptionSubmitted.ss b/templates/Includes/SubscriptionSubmitted.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/UnsubscribeFooter.ss b/templates/Includes/UnsubscribeFooter.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/UnsubscribeLinkEmail.ss b/templates/Includes/UnsubscribeLinkEmail.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/UnsubscribeRequestForm.ss b/templates/Includes/UnsubscribeRequestForm.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/Includes/VerificationExpired.ss b/templates/Includes/VerificationExpired.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/email/SimpleNewsletterTemplate.ss b/templates/email/SimpleNewsletterTemplate.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/email/SubscriptionConfirmationEmail.ss b/templates/email/SubscriptionConfirmationEmail.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/email/SubscriptionEmail.ss b/templates/email/SubscriptionEmail.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/email/SubscriptionVerificationEmail.ss b/templates/email/SubscriptionVerificationEmail.ss
+old mode 100644
+new mode 100755
+diff --git a/templates/gridfield/GridFieldNewsletterSummaryHeader.ss b/templates/gridfield/GridFieldNewsletterSummaryHeader.ss
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/_manifest_exclude b/tests/behat/_manifest_exclude
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/bootstrap/FeatureContext.php b/tests/behat/features/bootstrap/FeatureContext.php
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/manage-mailinglist.feature b/tests/behat/features/manage-mailinglist.feature
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/manage-newsletter.feature b/tests/behat/features/manage-newsletter.feature
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/send-newsletter.feature b/tests/behat/features/send-newsletter.feature
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/subscribe.feature b/tests/behat/features/subscribe.feature
+old mode 100644
+new mode 100755
+diff --git a/tests/behat/features/unsubscribe.feature b/tests/behat/features/unsubscribe.feature
+old mode 100644
+new mode 100755
+diff --git a/tests/phpcs/ruleset.xml b/tests/phpcs/ruleset.xml
+old mode 100644
+new mode 100755
+diff --git a/tests/travis/_config.php b/tests/travis/_config.php
+old mode 100644
+new mode 100755
+diff --git a/tests/travis/_ss_environment.php b/tests/travis/_ss_environment.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/Base.yml b/tests/unit/Base.yml
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/NewsletterEmailTest.php b/tests/unit/NewsletterEmailTest.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/NewsletterSendControllerTest.php b/tests/unit/NewsletterSendControllerTest.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/NewsletterTest.php b/tests/unit/NewsletterTest.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/RecipientTest.php b/tests/unit/RecipientTest.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/UnsubscribeTest.php b/tests/unit/UnsubscribeTest.php
+old mode 100644
+new mode 100755
+diff --git a/tests/unit/UnsubscribeTest.yml b/tests/unit/UnsubscribeTest.yml
+old mode 100644
+new mode 100755
+diff --git a/thirdparty/jquery-tablednd/jquery.tablednd.0.7.min.js b/thirdparty/jquery-tablednd/jquery.tablednd.0.7.min.js
+old mode 100644
+new mode 100755
+diff --git a/thirdparty/jquery-tablednd/jquery.tablednd.js b/thirdparty/jquery-tablednd/jquery.tablednd.js
+old mode 100644
+new mode 100755
