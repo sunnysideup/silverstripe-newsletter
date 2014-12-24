@@ -232,10 +232,11 @@ class NewsletterSendController extends BuildTask {
 					$this->processQueueOnShutdown($newsletterID);
 
 					//wait to avoid overloading the email server with too many emails that look like spam
-					if (!empty($this->Config()->get("throttle_batch_delay"))) {
-						sleep($this->Config()->get("throttle_batch_delay"));
+					if ($delay = $this->Config()->get("throttle_batch_delay")) {
+						sleep($delay);
 					}
-				} else {
+				}
+				else {
 					//mark the send process as complete
 					$newsletter->SentDate = SS_Datetime::now()->getValue();
 					$newsletter->Status = 'Sent';
