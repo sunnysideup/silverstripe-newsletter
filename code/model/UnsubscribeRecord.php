@@ -8,6 +8,7 @@
  * unsubscribed from a {@link MailingList}.
  */
 class UnsubscribeRecord extends DataObject {
+
 	private static $has_one = array(
 		'MailingList' => 'MailingList',
 		'Recipient' => 'Recipient'
@@ -30,4 +31,5 @@ class UnsubscribeRecord extends DataObject {
 			: $mailinglist->ID;
 		$this->write();
 	}
+
 }

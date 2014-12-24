@@ -7,9 +7,17 @@
  * Database record for recipients that have had the newsletter sent to them, or are about to have a newsletter sent.
  */
 class SendRecipientQueue extends DataObject {
+
+	private static $forced_delay = 2;
+
 	/**
-	 *	Status has 4 possible values: "Sent", (mail() returned TRUE), "Failed" (mail() returned FALSE),
-	 * 	"Bounced" ({@see $email_bouncehandler}), or "BlackListed" (sending to is disabled).
+	 *	Status has 6 possible values:
+	 * "Scheduled" - not sent yet
+	 * "InProgress" - being sent
+	 * "Sent", (mail() returned TRUE),
+	 * "Failed" (mail() returned FALSE),
+	 * "Bounced" ({@see $email_bouncehandler}), or
+	 * "BlackListed" (sending to is disabled) - this does NOT necessarily mean the Recipient is Blacklisted!
 	 */
 	private static $db = array(
 		"Status" => "Enum('Scheduled, InProgress, Sent, Failed, Bounced, BlackListed', 'Scheduled')",
@@ -51,26 +59,35 @@ class SendRecipientQueue extends DataObject {
 	public function send($newsletter = null, $recipient = null) {
 		if (empty($newsletter)) $newsletter = $this->Newsletter();
 		if (empty($recipient)) $recipient = $this->Recipient();
-
+		//we sleep for at least one second before any send.
+		//this reduced the max send rate to 3600 emails per hour
+		if($sleep = $this->Config()->get("forced_delay")) {
+			sleep($sleep);
+		}
+		$recipient = Recipient::get()->byID($this->RecipientID);
 		//check recipient not blacklisted and verified
 		if ($recipient && empty($recipient->Blacklisted) && !empty($recipient->Verified)) {
-			$email = new NewsLetterEmail(
-				$newsletter,
-				$recipient
-			);
-			if (!empty($newsletter->ReplyTo)) $email->addCustomHeader('Reply-To', $newsletter->ReplyTo);
-
-			$success = $email->send();
-
-			if ($success) {
-				$this->Status = 'Sent';
-				$recipient->ReceivedCount = $recipient->ReceivedCount + 1;
+			//only send if it is InProgress - we send it, we dont want to double-send anything
+			//and we want to be very sure about this.
+			if($this->Status == "InProgress") {
+				$email = new NewsLetterEmail(
+					$newsletter,
+					$recipient
+				);
+				if (!empty($newsletter->ReplyTo)) {
+					$email->addCustomHeader('Reply-To', $newsletter->ReplyTo);
+				}
+				$success = $email->send();
+				if ($success) {
+					$this->Status = 'Sent';
+					$recipient->ReceivedCount = $recipient->ReceivedCount + 1;
+				}
+				else {
+					$this->Status = 'Failed';
+					$recipient->BouncedCount = $recipient->BouncedCount + 1;
+				}
+				$recipient->write();
 			}
-			else {
-				$this->Status = 'Failed';
-				$recipient->BouncedCount = $recipient->BouncedCount + 1;
-			}
-			$recipient->write();
 		}
 		else {
 			$this->Status = 'BlackListed';

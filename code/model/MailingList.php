@@ -4,22 +4,22 @@
  */
 
 /**
- * Represents a specific containner of newsletter recipients 
+ * Represents a specific containner of newsletter recipients
  */
 class MailingList extends DataObject {
 
 	/* the database fields */
 	private static $db = array(
-		'Title'					=> "Varchar",
+		'Title' => "Varchar(255)",
 	);
 
 	/* a mailing list could contains many newsletter recipients */
 	private static $many_many = array(
-		'Recipients'			=> "Recipient",
+		'Recipients' => "Recipient",
 	);
 
 	private static $belongs_many_many = array(
-		'Newsletters'			=> "Newsletter",
+		'Newsletters' => "Newsletter",
 	);
 
 	private static $singular_name = 'Mailinglist';
@@ -37,14 +37,12 @@ class MailingList extends DataObject {
 
 	public function fieldLabels($includelrelations = true) {
 		$labels = parent::fieldLabels($includelrelations);
-		
 		$labels["Title"] = _t('Newsletter.FieldTitle', "Title");
 		$labels["FullTitle"] = _t('Newsletter.FieldTitle', "Title");
 		$labels["ActiveRecipients.Count"] = _t('Newsletter.Recipients', "Recipients");
-		
 		return $labels;
 	}
-	
+
 	function getCMSFields() {
 		$fields = new FieldList();
 		$fields->push(new TabSet("Root", $mainTab = new Tab("Main")));
@@ -63,7 +61,9 @@ class MailingList extends DataObject {
 			new GridFieldAddNewButton(),
 			new GridFieldDetailForm(),
 			new GridFieldEditButton(),
-			$autocompelete = new GridFieldAutocompleterWithFilter('before',	array(
+			$autocompelete = new GridFieldAutocompleterWithFilter(
+				'before',
+				array(
 					'FirstName',
 					'MiddleName',
 					'Surname',
@@ -91,13 +91,18 @@ class MailingList extends DataObject {
 
 		$fields->addFieldToTab('Root.Main',new FieldGroup($recipientsGrid));
 		$this->extend("updateCMSFields", $fields);
-		
+
 		if(!$this->ID)
 			$fields->removeByName('Recipients');
 
 		return $fields;
 	}
 
+	/**
+	 * returns name with number of recipients between brackets
+	 * e.g. MyList(2)
+	 * @return String
+	 */
 	public function getFullTitle() {
 		return sprintf(
 			'%s (%s)',
@@ -112,11 +117,14 @@ class MailingList extends DataObject {
 
 	/**
 	 * Returns all recipients who aren't blacklisted, and are verified.
+	 *
+	 * @return DataList
 	 */
 	public function ActiveRecipients() {
 		if($this->Recipients()  instanceof UnsavedRelationList ) {
-			return new ArrayList();
+			return Recipients::get()->filter(array("ID" => 0));
 		}
-		return $this->Recipients()->exclude('Blacklisted', 1)->exclude('Verified', 0);
+		return $this->Recipients()->exclude(array('Blacklisted' => 1, 'Verified' => 0));
 	}
+
 }

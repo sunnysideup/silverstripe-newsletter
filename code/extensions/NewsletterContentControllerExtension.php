@@ -9,6 +9,8 @@ class NewsletterContentControllerExtension extends Extension{
 
 	/**
 	 * Utility method to get the unsubscribe form
+	 *
+	 * @return Form
 	 */
 	public static function getUnsubscribeFormObject($self, $fields = null, $actions = null) {
 		if (!$fields) $fields = FieldList::create();
@@ -16,7 +18,10 @@ class NewsletterContentControllerExtension extends Extension{
 		return new Form($self, 'unsubscribeLink', $fields, $actions);
 	}
 
-
+	/**
+	 *
+	 * @return Form
+	 */
 	public function UnsubscribeRequestForm() {
 		$fields = new FieldList(
 			EmailField::create('email',_t("Newsletter.UnsubscribeEmail","Your subscription email address"))

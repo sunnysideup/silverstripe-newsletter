@@ -53,7 +53,9 @@ class NewsletterSendController extends BuildTask {
 	 * @return NewsletterSendController
 	 */
 	public static function inst() {
-		if(!self::$inst) self::$inst = new NewsletterSendController();
+		if(!self::$inst) {
+			self::$inst = new NewsletterSendController();
+		}
 		return self::$inst;
 	}
 
@@ -120,17 +122,18 @@ class NewsletterSendController extends BuildTask {
 		$stuckQueueItems = SendRecipientQueue::get()->filter(array(
 			'NewsletterID' => $newsletterID,
 			'Status' => 'InProgress',
-			'LastEdited:LessThan' => date('Y-m-d H:i:m',strtotime('-'.self::$stuck_timeout.' minutes'))
+			'LastEdited:LessThan' => date('Y-m-d H:i:m',strtotime('-'.$this->Config()->get("stuck_timeout").' minutes'))
 		));
 
 		$stuckCount = $stuckQueueItems->count();
 		if ($stuckCount  > 0) {
 			foreach($stuckQueueItems as $item){
-				if ($item->RetryCount < self::$retry_limit) {
+				if ($item->RetryCount < $this->Config()->get("retry_limit")) {
 					$item->RetryCount = $item->RetryCount + 1;
 					$item->Status = "Scheduled";    //retry the item
 					$item->write();
-				} else {    //enough retries, stop this email and mark it as failed
+				}
+				else {    //enough retries, stop this email and mark it as failed
 					$item->Status = "Failed";
 					$item->write();
 				}
@@ -179,7 +182,7 @@ class NewsletterSendController extends BuildTask {
 					$queueItems = SendRecipientQueue::get()
 							->filter(array('NewsletterID' => $newsletterID, 'Status' => 'Scheduled'))
 							->sort('Created ASC')
-							->limit(self::$items_to_batch_process);
+							->limit($this->Config()->get("items_to_batch_process"));
 
 					//set them all to "in process" at once
 					foreach($queueItems as $item){
@@ -229,7 +232,9 @@ class NewsletterSendController extends BuildTask {
 					$this->processQueueOnShutdown($newsletterID);
 
 					//wait to avoid overloading the email server with too many emails that look like spam
-					if (!empty(self::$throttle_batch_delay)) sleep(self::$throttle_batch_delay);
+					if (!empty($this->Config()->get("throttle_batch_delay"))) {
+						sleep($this->Config()->get("throttle_batch_delay"));
+					}
 				} else {
 					//mark the send process as complete
 					$newsletter->SentDate = SS_Datetime::now()->getValue();

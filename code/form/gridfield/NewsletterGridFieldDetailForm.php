@@ -61,7 +61,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
 
 	/**
 	 * Used for preview controls
-	 * 
+	 *
 	 * @return ArrayData
 	 */
 	public function getSilverStripeNavigator() {
@@ -93,7 +93,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
 	 */
 	public function emailpreview(SS_HTTPRequest $request = null) {
 		$emailVar = $request->getVar('email');
-		
+
 		$recipient = new Recipient(Recipient::$test_data);
 		if ($request && !empty($emailVar)) {
 			$recipient->Email = Convert::raw2js($emailVar);
@@ -182,6 +182,7 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
 	}
 
 	public function doSend($data, $form){
+		set_time_limit(600);
 		//copied from parent
 		$new_record = $this->record->ID == 0;
 		$controller = Controller::curr();
@@ -191,7 +192,8 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
 			$this->record->Status = 'Sending';  //custom: changing the status of to indicate we are sending
 			$this->record->write();
 			$this->gridField->getList()->add($this->record);
-		} catch(ValidationException $e) {
+		}
+		catch(ValidationException $e) {
 			$form->sessionMessage($e->getResult()->message(), 'bad');
 			$responseNegotiator = new PjaxResponseNegotiator(array(
 				'CurrentForm' => function() use(&$form) {
@@ -223,11 +225,13 @@ class NewsletterGridFieldDetailForm_ItemRequest extends GridFieldDetailForm_Item
 
 		if($new_record) {
 			return Controller::curr()->redirect($this->Link());
-		} elseif($this->gridField->getList()->byId($this->record->ID)) {
+		}
+		elseif($this->gridField->getList()->byId($this->record->ID)) {
 			// Return new view, as we can't do a "virtual redirect" via the CMS Ajax
 			// to the same URL (it assumes that its content is already current, and doesn't reload)
 			return $this->edit(Controller::curr()->getRequest());
-		} else {
+		}
+		else {
 			// Changes to the record properties might've excluded the record from
 			// a filtered list, so return back to the main view if it can't be found
 			$noActionURL = $controller->removeAction($data['url']);

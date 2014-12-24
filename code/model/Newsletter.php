@@ -4,27 +4,27 @@
  */
 
 /**
- * Single newsletter instance. 
+ * Single newsletter instance.
  */
 class Newsletter extends DataObject implements CMSPreviewable{
 
 	private static $db = array(
-		"Status"				=> "Enum('Draft, Sending, Sent', 'Draft')",
-		"Subject"				=> "Varchar(255)",
-		"Content"				=> "HTMLText",
-		"SentDate"				=> "Datetime",
-		"SendFrom"				=> "Varchar(255)",
-		"ReplyTo"				=> "Varchar(255)",
-		"RenderTemplate"		=> "Varchar",
+		"Status"             => "Enum('Draft, Sending, Sent', 'Draft')",
+		"Subject"            => "Varchar(255)",
+		"Content"            => "HTMLText",
+		"SentDate"           => "Datetime",
+		"SendFrom"           => "Varchar(255)",
+		"ReplyTo"            => "Varchar(255)",
+		"RenderTemplate"     => "Varchar(255)",
 	);
 
 	private static $has_many = array(
-		"SendRecipientQueue"	=> "SendRecipientQueue",
-		"TrackedLinks"			=> "Newsletter_TrackedLink"
+		"SendRecipientQueue" => "SendRecipientQueue",
+		"TrackedLinks"       => "Newsletter_TrackedLink"
 	);
 
 	private static $many_many = array(
-		"MailingLists"			=> "MailingList"
+		"MailingLists"       => "MailingList"
 	);
 
 	private static $searchable_fields = array(
@@ -44,16 +44,22 @@ class Newsletter extends DataObject implements CMSPreviewable{
 		"Status"
 	);
 
-	static $required_fields = array(
-		'Subject', 'SendFrom'
+	private static $required_fields = array(
+		'Subject',
+		'SendFrom'
 	);
 
-	static $required_relations = array(
+	private static $required_relations = array(
 		'MailingLists'
 	);
 
-	private static $field_labels = array();
-	
+	/**
+	 * Default .ss template for sending newsletters.
+	 *
+	 * @var String
+	 */
+	private static $default_render_template = "SimpleNewsletterTemplate";
+
 	public function fieldLabels($includelrelations = true) {
 		$labels = parent::fieldLabels($includelrelations);
 
@@ -68,28 +74,35 @@ class Newsletter extends DataObject implements CMSPreviewable{
 
 	public function validate() {
 		$result = parent::validate();
-
-		foreach(self::$required_fields as $field) {
+		$fieldLabels = $this->fieldLabels();
+		foreach($this->Config()->get("required_fields") as $field) {
 			if (empty($this->$field)) {
 				$result->error(_t('Newsletter.FieldRequired',
 					'"{field}" field is required',
-						array('field' => isset(self::$field_labels[$field])?self::$field_labels[$field]:$field)
+						array('field' => isset($field_labels[$field]) ? $field_labels[$field] : $field)
 				));
 			}
 		}
-
 		if (!empty($this->ID)) {
-			foreach(self::$required_relations as $relation) {
+			foreach($this->Config()->get("required_relations") as $relation) {
 				if ($this->$relation()->Count() == 0) {
-					$result->error(_t('Newsletter.RelationRequired',
-						'Select at least one "{relation}"',
+					$result->error(
+						_t(
+							'Newsletter.RelationRequired',
+							'Select at least one "{relation}"',
 							array('relation' => $relation)
-					));
+						)
+					);
 				}
 			}
 		}
 
 		return $result;
+	}
+
+	function populateDefaults(){
+		parent::populateDefaults();
+		$this->RenderTemplate = $this->Config()->get("default_render_template");
 	}
 
 	/**
@@ -109,7 +122,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
 			new ReadonlyField('Status', $this->fieldLabel('Status')),
 			'Subject'
 		);
-		
+
 		$fields->removeByName("SentDate");
 		if ($this->Status == "Sent") {
 			$fields->addFieldToTab(
@@ -127,7 +140,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
 			->setValue(Email::getAdminEmail())
 			->setAttribute('placeholder', 'admin@example.org')
 			->setDescription(_t(
-				'Newsletter.ReplyToDesc', 
+				'Newsletter.ReplyToDesc',
 				'Any undeliverable emails will be collected in this mailbox'
 			));
 
@@ -136,8 +149,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
 		$fields->removeByName('TrackedLinks');
 
 		if($this->Status != 'Sent') {
-			$contentHelp = '<strong>' 
-				. _t('Newsletter.FormattingHelp', 'Formatting Help') 
+			$contentHelp = '<strong>'
+				. _t('Newsletter.FormattingHelp', 'Formatting Help')
 				. '</strong><br />';
 			$contentHelp .= '<ul>';
 			foreach($this->getAvailablePlaceholders() as $title => $description) {
@@ -152,45 +165,46 @@ class Newsletter extends DataObject implements CMSPreviewable{
 		$templateSource = $this->templateSource();
 		if(count($templateSource) > 1) {
 			$fields->replaceField(
-				"RenderTemplate", 
+				"RenderTemplate",
 				new DropdownField("RenderTemplate", _t('NewsletterAdmin.RENDERTEMPLATE',
-					'Template the newsletter render to'), 
+					'Template the newsletter render to'),
 				$templateSource)
-			);	
+			);
 
 			$explanationTitle = _t("Newletter.TemplateExplanationTitle",
 				"Select a styled template (.ss template) that this newsletter renders with"
 			);
 			$fields->insertBefore(
-				LiteralField::create("TemplateExplanationTitle", "<h5>$explanationTitle</h5>"), 
+				LiteralField::create("TemplateExplanationTitle", "<h5>$explanationTitle</h5>"),
 				"RenderTemplate"
 			);
 			if(!$this->ID) {
-				$explanation1 = _t("Newletter.TemplateExplanation1", 
+				$explanation1 = _t("Newletter.TemplateExplanation1",
 					'You should make your own styled SilverStripe templates	make sure your templates have a'
 					. '$Body coded so the newletter\'s content could be clearly located in your templates'
 				);
-				$explanation2 = _t("Newletter.TemplateExplanation2", 
+				$explanation2 = _t("Newletter.TemplateExplanation2",
 					"Make sure your newsletter templates could be looked up in the dropdown list below by
-					either placing them under your theme directory,	e.g. themes/mytheme/templates/email/
+					either placing them under your theme directory, e.g. themes/mytheme/templates/email/
 					");
-				$explanation3 = _t("Newletter.TemplateExplanation3", 
+				$explanation3 = _t("Newletter.TemplateExplanation3",
 					"or under your project directory e.g. mysite/templates/email/
 					");
 				$fields->insertBefore(
-					LiteralField::create("TemplateExplanation1", "<p class='help'>$explanation1</p>"), 
+					LiteralField::create("TemplateExplanation1", "<p class='help'>$explanation1</p>"),
 					"RenderTemplate"
 				);
 				$fields->insertBefore(
 					LiteralField::create(
-						"TemplateExplanation2", 
+						"TemplateExplanation2",
 						"<p class='help'>$explanation2<br />$explanation3</p>"
-					), 
+					),
 					"RenderTemplate"
 				);
 			}
-		} else {
-			$fields->replaceField("RenderTemplate", 
+		}
+		else {
+			$fields->replaceField("RenderTemplate",
 				new HiddenField('RenderTemplate', false, key($templateSource))
 			);
 		}
@@ -201,8 +215,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
 
 			$fields->addFieldToTab("Root.Main",
 				new CheckboxSetField(
-					"MailingLists", 
-					_t('Newsletter.SendTo', "Send To", 'Selects mailing lists from set of checkboxes'), 
+					"MailingLists",
+					_t('Newsletter.SendTo', "Send To", 'Selects mailing lists from set of checkboxes'),
 					$mailinglists->map('ID', 'FullTitle')
 				)
 			);
@@ -225,9 +239,9 @@ class Newsletter extends DataObject implements CMSPreviewable{
 			//Create the Sent To Queue grid
 			if (class_exists("GridFieldAjaxRefresh") && $this->SendRecipientQueue()->exists()) {
 				//only use auto-refresh if there is a send out currently in-progress, otherwise no-point
-				if ($this->SendRecipientQueue()->filter(
-					array('Status'=>array('Scheduled','InProgress')))->count() > 0) {
-					$gridFieldConfig->addComponent(new GridFieldAjaxRefresh(5000,true));
+				$countOfScheduledOrInProgressMails = $this->SendRecipientQueue()->filter(array('Status'=> array('Scheduled','InProgress')))->count();
+				if ($countOfScheduledOrInProgressMails > 0) {
+					$gridFieldConfig->addComponent(new GridFieldAjaxRefresh(5000, true));
 				}
 			}
 
@@ -247,13 +261,14 @@ class Newsletter extends DataObject implements CMSPreviewable{
 					Director::absoluteBaseURL(),
 					'dev/tasks/NewsletterSendController?newsletter='.$this->ID
 				);
-				$fields->addFieldToTab('Root.SentTo',
+				$fields->addFieldToTab(
+					'Root.SentTo',
 					new LiteralField(
 						'RestartQueue',
 						sprintf(
 							'<a href="%s" class="ss-ui-button" data-icon="arrow-circle-double">%s</a>',
 							$restartLink,
-							_t('Newsletter.RestartQueue', 'Restart queue processing')	
+							_t('Newsletter.RestartQueue', 'Restart queue processing')
 						)
 					)
 				);
@@ -261,7 +276,9 @@ class Newsletter extends DataObject implements CMSPreviewable{
 
 			//only show the TrackedLinks tab, if there are tracked links in the newsletter and the status is "Sent"
 			if($this->TrackedLinks()->count() > 0) {
-				$fields->addFieldToTab('Root.TrackedLinks',GridField::create(
+				$fields->addFieldToTab(
+					'Root.TrackedLinks',
+					GridField::create(
 						'TrackedLinks',
 						_t('NewsletterAdmin.TrackedLinks', 'Tracked Links'),
 						$this->TrackedLinks(),
@@ -270,14 +287,11 @@ class Newsletter extends DataObject implements CMSPreviewable{
 				);
 			}
 		}
-
-
-
 		return $fields;
 	}
 
 	/**
-	 * return array containing all possible email templates file name 
+	 * return array containing all possible email templates file name
 	 * under the folders of both theme and project specific folder.
 	 *
 	 * @return array
@@ -285,8 +299,8 @@ class Newsletter extends DataObject implements CMSPreviewable{
 	public function templateSource(){
 		$paths = NewsletterAdmin::template_paths();
 
-		$templates = array( 
-			"SimpleNewsletterTemplate" => _t('TemplateList.SimpleNewsletterTemplate', 'Simple Newsletter Template')
+		$templates = array(
+			$this->Config()->get("default_render_template") => _t('TemplateList.SimpleNewsletterTemplate', 'Simple Newsletter Template')
 		);
 
 		if(isset($paths) && is_array($paths)){
@@ -325,11 +339,11 @@ class Newsletter extends DataObject implements CMSPreviewable{
 	public function getAvailablePlaceholders() {
 		return array(
 			'UnsubscribeLink' => _t(
-				'Newsletter.PlaceholderUnsub', 
+				'Newsletter.PlaceholderUnsub',
 				'Personalized link to unsubscribe from newsletter'
 			),
 			'AbsoluteBaseURL' => _t(
-				'Newsletter.PlaceholderAbsoluteUrl', 
+				'Newsletter.PlaceholderAbsoluteUrl',
 				'Absolute URL to the website'
 			),
 			'To' => _t(
@@ -377,7 +391,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
 
 	function render() {
 		if(!$templateName = $this->RenderTemplate) {
-			$templateName = 'SimpleNewsletterTemplate';
+			$templateName = $this->Config()->get("default_render_template");
 		}
 		// Block stylesheets and JS that are not required (email templates should have inline CSS/JS)
 		Requirements::clear();
@@ -398,7 +412,7 @@ class Newsletter extends DataObject implements CMSPreviewable{
 
 	function getContentBody(){
 		$content = $this->obj('Content');
-		
+
 		$this->extend("updateContentBody", $content);
 		return $content;
 	}
@@ -445,13 +459,13 @@ class Newsletter extends DataObject implements CMSPreviewable{
  * @package newsletter
  */
 class Newsletter_TrackedLink extends DataObject {
-	
+
 	private static $db = array(
 		'Original' => 'Varchar(255)',
 		'Hash' => 'Varchar(100)',
 		'Visits' => 'Int'
 	);
-	
+
 	private static $has_one = array(
 		'Newsletter' => 'Newsletter'
 	);
@@ -461,13 +475,13 @@ class Newsletter_TrackedLink extends DataObject {
 		"Original" => "Link URL",
 		"Visits" => "Visit Counts"
 	);
-	
+
 	/**
 	 * Generate a unique hash
 	 */
 	function onBeforeWrite() {
 		parent::onBeforeWrite();
-		
+
 		if(!$this->Hash) $this->Hash = md5(time() + rand());
 	}
 
@@ -479,7 +493,7 @@ class Newsletter_TrackedLink extends DataObject {
 	 */
 	function Link() {
 		if(!$this->Hash) $this->write();
-		
+
 		return 'newsletterlinks/'. $this->Hash;
 	}
 }
