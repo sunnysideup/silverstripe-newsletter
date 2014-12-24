@@ -58,10 +58,10 @@ class NewsletterSendingTestTask extends BuildTask {
 
 		set_time_limit(600);
 		if(isset($_GET["count"])) {
-			Config::inst()->update("number_of_emails_to_test", intval($_GET["count"]));
+			Config::inst()->update("NewsletterSendingTestTask", "number_of_emails_to_test", intval($_GET["count"]));
 		}
 		if(isset($_GET["email"])) {
-			Config::inst()->update("email_base", Convert::raw2sql($_GET["count"]));
+			Config::inst()->update("NewsletterSendingTestTask", "email_base", Convert::raw2sql($_GET["count"]));
 		}
 		DB::alteration_message(
 			"<h3>This tasks helps you to send
